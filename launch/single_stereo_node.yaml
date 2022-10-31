@@ -1,0 +1,5 @@
+uvc_camera_stereo:
+  ros__parameters:
+    left_camera_info_url: "/home/nishi/colcon_ws/src/uvc_camera/example-left.yaml"
+    right_camera_info_url: "/home/nishi/colcon_ws/src/uvc_camera/example-right.yaml"
+

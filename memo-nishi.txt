@@ -1,0 +1,16 @@
+
+1. build
+$ colcon build --packages-select uvc_camera
+
+2. run direct
+$ ros2 run uvc_camera uvc_single_stereo_node
+
+3. run lunch
+$ ros2 launch /home/nishi/colcon_ws/src/uvc_camera/launch/single_stereo_node.launch.xml
+
+
+
+4. check Rviz2
+$ ros2 launch turtlebot3_bringup rviz2.launch.py
+
+

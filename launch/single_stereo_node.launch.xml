@@ -1,0 +1,31 @@
+<!--
+uvc_camera/launch/single_stereo_node.launch.xml
+  how to run
+  $ ros2 launch /home/nishi/colcon_ws/src/uvc_camera/launch/single_stereo_node.launch.xml
+-->
+<launch>
+  <node pkg="uvc_camera" exec="uvc_single_stereo_node" output="screen">
+    <param name="width" type="int" value="320" />
+    <param name="height" type="int" value="240" />
+    <param name="fps" type="int" value="15" />
+    <param name="frame" value="wide_stereo" />
+
+    <param name="auto_focus" type="bool" value="False" />
+    <param name="focus_absolute" type="int" value="0" />
+    <!-- other supported params: auto_exposure, exposure_absolute, brightness, power_line_frequency -->
+
+    <param name="left/device" value="/dev/video0" />
+    <!-- <param name="right/device" value="/dev/video1" /> -->
+    <!-- file:///home/nishi/.ros/camera_info/example-left.yaml -->
+    <param name="left/camera_info_url" value="file:///home/nishi/colcon_ws/src/uvc_camera/example-left.yaml" />
+    <!-- file:///home/nishi/.ros/camera_info/example-right.yaml -->
+    <param name="right/camera_info_url" value="file:///home/nishi/colcon_ws/src/uvc_camera/example-right.yaml" />
+
+    <!-- <param from="/home/nishi/colcon_ws/src/uvc_camera/launch/single_stereo_node.yaml"/> -->
+    <!--
+    <param name="left/camera_info_url" value="file://$(find uvc_camera)/example-left.yaml" />
+    <param name="right/camera_info_url" value="file://$(find uvc_camera)/example-right.yaml" />
+    -->
+    
+  </node>
+</launch>
