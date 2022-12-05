@@ -16,12 +16,15 @@ int main (int argc, char **argv) {
   //auto node = std::make_shared<uvc_camera::Single_StereoCamera>("uvc_camera_stereo");
   //auto node = std::make_shared<uvc_camera::Single_StereoCamera>("uvc_camera_stereo",rclcpp::NodeOptions{});
 
-
   //uvc_camera::Single_StereoCamera stereo(ros::NodeHandle(), ros::NodeHandle("~"));
 
   //rclcpp::spin(node);
 
-  rclcpp::spin(std::make_shared<uvc_camera::Single_StereoCamera>("uvc_camera_stereo"));
+  //rclcpp::spin(std::make_shared<uvc_camera::Single_StereoCamera>("uvc_camera_stereo"));
+  rclcpp::spin(std::make_shared<uvc_camera::Single_StereoCamera>(rclcpp::NodeOptions{}));
+
+  //auto node = std::make_shared<v4l2_camera::V4L2Camera>(rclcpp::NodeOptions{});
+
   rclcpp::shutdown();
   //node = nullptr;
   return 0;

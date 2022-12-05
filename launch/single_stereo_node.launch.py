@@ -9,7 +9,6 @@ def generate_launch_description():
         Node(
             package='uvc_camera',
             executable='uvc_single_stereo_node',
-            output='screen',
             #name='uvc_camera_stereo',
             #remappings=[('string_topic', '/talker')],
             emulate_tty=True,

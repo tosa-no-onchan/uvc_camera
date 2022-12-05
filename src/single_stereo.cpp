@@ -1,3 +1,6 @@
+/*
+* https://yhrscoding.hatenablog.com/entry/2021/09/26/104445
+*/
 //#include <boost/thread.hpp>
 
 //#include <ros/ros.h>
@@ -56,13 +59,14 @@ static inline void rotate(unsigned char *dst_chr, unsigned char *src_chr, int pi
 namespace uvc_camera 
 {
 
-//Single_StereoCamera::Single_StereoCamera(rclcpp::NodeOptions const & options)
-//: rclcpp::Node{"v4l2_camera", options}
-//{
-//  init();
-//}
-
 //Single_StereoCamera::Single_StereoCamera(ros::NodeHandle comm_nh, ros::NodeHandle param_nh) :
+Single_StereoCamera::Single_StereoCamera(rclcpp::NodeOptions const & options)
+: rclcpp::Node{"uvc_camera_stereo", options}
+{
+  //intra_ = options.use_intra_process_comms();
+  init();
+}
+
 void Single_StereoCamera::init()
 {
   /* default config values */
@@ -76,6 +80,10 @@ void Single_StereoCamera::init()
   frame = "camera";
   rotate_left = false;
   rotate_right = false;
+  //left_cinfo_name="left_camera";      // for ROS
+  left_cinfo_name="narrow_stereo/left";   // for ROS2
+  //right_cinfo_name="right_camera";    // for ROS
+  right_cinfo_name="narrow_stereo/right"; // for ROS2
 
   /* set up information managers */
   std::string left_url, right_url;
@@ -88,9 +96,12 @@ void Single_StereoCamera::init()
   int power_line_frequency;
 
 
-
   this->declare_parameter("left/camera_info_url");
   this->declare_parameter("right/camera_info_url");
+
+  this->declare_parameter<std::string>("left_cinfo_name",left_cinfo_name);
+  this->declare_parameter<std::string>("right_cinfo_name",right_cinfo_name);
+
   this->declare_parameter<std::string>("left/device",left_device);
   this->declare_parameter<std::string>("right/device",right_device);
   this->declare_parameter<int>("fps",fps);
@@ -123,19 +134,6 @@ void Single_StereoCamera::init()
   //RCLCPP_INFO(get_logger(), "right/camera_info_url: %s", right_url.c_str());
   std::cout << "right/camera_info_url:"<< right_url.c_str() << std::endl;
 
-  //left_info_mgr.loadCameraInfo(left_url);
-  //right_info_mgr.loadCameraInfo(right_url);
-  //------------------
-  // CameraInfoManager( rclcpp::Node * node, const std::string & cname = "camera", const std::string & url = "");
-  //-----------------
-  // cname= は、 left/camera_info_url: example-left.yaml の camera_name を使用
-  // camera_name: left_camera
-  left_info_mgr = std::make_shared<camera_info_manager::CameraInfoManager>(this, "left_camera",left_url);
-  //left_info_mgr->loadCameraInfo(left_url);
-
-  // cname= は、 right/camera_info_url: example-right.yaml の camera_name を使用
-  right_info_mgr = std::make_shared<camera_info_manager::CameraInfoManager>(this, "right_camera",right_url);
-  //right_info_mgr->loadCameraInfo(right_url);
 
   /* pull other configuration */
   //pnode.getParam("left/device", left_device);
@@ -180,18 +178,69 @@ void Single_StereoCamera::init()
   get_parameter<std::string>("frame_id", frame);
   std::cout << "frame_id:"<< frame.c_str() << std::endl;
 
-  /* advertise image streams and info streams */
-  //left_pub = it.advertise("left/image_raw", 1);
-  left_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_raw", 1);
 
-  //right_pub = it.advertise("right/image_raw", 1);
-  right_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_raw", 1);
+  //left_info_mgr.loadCameraInfo(left_url);
+  //right_info_mgr.loadCameraInfo(right_url);
+  //------------------
+  // CameraInfoManager( rclcpp::Node * node, const std::string & cname = "camera", const std::string & url = "");
+  //-----------------
+  // cname= は、 left/camera_info_url: example-left.yaml の camera_name を使用
+  // camera_name: left_camera
+  left_info_mgr = std::make_shared<camera_info_manager::CameraInfoManager>(this, left_cinfo_name,left_url);
+  //left_info_mgr->loadCameraInfo(left_url);
 
-  //left_info_pub = node.advertise<CameraInfo>("left/camera_info", 1);
-  left_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 1);
+  // cname= は、 right/camera_info_url: example-right.yaml の camera_name を使用
+  right_info_mgr = std::make_shared<camera_info_manager::CameraInfoManager>(this, right_cinfo_name,right_url);
+  //right_info_mgr->loadCameraInfo(right_url);
 
-  //right_info_pub = node.advertise<CameraInfo>("right/camera_info", 1);
-  right_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", 1);
+  //if (options.use_intra_process_comms()) {
+  if(intra_){
+
+    // https://yhrscoding.hatenablog.com/entry/2021/09/26/104445
+    rclcpp::QoS video_qos(1);
+    video_qos.reliable();
+    //video_qos.best_effort();
+    video_qos.durability_volatile();
+
+    /* advertise image streams and info streams */
+    //left_pub = it.advertise("left/image_raw", 1);
+    //left_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_raw", 1);
+    left_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_raw", video_qos);
+
+    //right_pub = it.advertise("right/image_raw", 1);
+    //right_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_raw", 1);
+    right_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_raw", video_qos);
+
+    //left_info_pub = node.advertise<CameraInfo>("left/camera_info", 1);
+    //left_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 1);
+    left_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", video_qos);
+
+    //right_info_pub = node.advertise<CameraInfo>("right/camera_info", 1);
+    //right_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", 1);
+    right_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", video_qos);
+
+  }
+  else{
+    //#define USE_TEST_VAL
+    //#ifdef USE_TEST_VAL
+      rmw_qos_profile_t video_qos_profile = rmw_qos_profile_sensor_data;
+      video_qos_profile.depth=1;
+
+      //video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+      video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_SYSTEM_DEFAULT;
+
+      //video_qos_profile.durability = RMW_QOS_POLICY_DURABILITY_VOLATILE;
+      video_qos_profile.durability = RMW_QOS_POLICY_DURABILITY_SYSTEM_DEFAULT;
+      //video_qos_profile.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+      
+      left_camera_transport_pub_ = image_transport::create_camera_publisher(this, "left/image_raw",video_qos_profile);
+      right_camera_transport_pub_ = image_transport::create_camera_publisher(this, "right/image_raw",video_qos_profile);
+    //#else
+    //  left_camera_transport_pub_ = image_transport::create_camera_publisher(this, "left/image_raw");
+    //  right_camera_transport_pub_ = image_transport::create_camera_publisher(this, "right/image_raw");
+    //#endif
+  }
+
 
   /* initialize the cameras */
   cam_left =
@@ -258,6 +307,8 @@ void Single_StereoCamera::init()
     //cam_right->set_v4l2_control(V4L2_CID_POWER_LINE_FREQUENCY, val, "power_line_frequency");
   }
 
+
+
   // TODO:
   // - add params for
   //   contrast
@@ -280,33 +331,49 @@ void Single_StereoCamera::init()
   image_thread = boost::thread(boost::bind(&Single_StereoCamera::feedImages, this));
 }
 
-void Single_StereoCamera::sendInfo(rclcpp::Time time) {
+void Single_StereoCamera::sendInfo(rclcpp::Time time, std::shared_ptr<sensor_msgs::msg::Image> const & img_l, 
+      std::shared_ptr<sensor_msgs::msg::Image> const & img_r) {
+
   //CameraInfoPtr info_left(new CameraInfo(left_info_mgr.getCameraInfo()));
-  auto info_left = std::make_unique<sensor_msgs::msg::CameraInfo>(left_info_mgr->getCameraInfo());
-  //if (!checkCameraInfo(*img, *ci)) {
-  //  *cinfo_l = sensor_msgs::msg::CameraInfo{};
-  //  cinfo_l->height = img->height;
-  //  cinfo_l->width = img->width;
-  //}
+  std::shared_ptr<sensor_msgs::msg::CameraInfo> info_left = std::make_shared<sensor_msgs::msg::CameraInfo>(left_info_mgr->getCameraInfo());
+  //printf("%s",info_left);
+
+  if (!checkCameraInfo(*img_l, *info_left)) {
+    *info_left = sensor_msgs::msg::CameraInfo{};
+    info_left->height = img_l->height;
+    info_left->width = img_l->width;
+  }
 
   //CameraInfoPtr info_right(new CameraInfo(right_info_mgr.getCameraInfo()));
-  auto info_right = std::make_unique<sensor_msgs::msg::CameraInfo>(right_info_mgr->getCameraInfo());
-  //if (!checkCameraInfo(*img, *ci)) {
-  //  *cinfo_l = sensor_msgs::msg::CameraInfo{};
-  //  cinfo_l->height = img->height;
-  //  cinfo_l->width = img->width;
-  //}
+  std::shared_ptr<sensor_msgs::msg::CameraInfo> info_right = std::make_shared<sensor_msgs::msg::CameraInfo>(right_info_mgr->getCameraInfo());
+
+  if (!checkCameraInfo(*img_r, *info_right)) {
+    *info_right = sensor_msgs::msg::CameraInfo{};
+    info_right->height = img_r->height;
+    info_right->width = img_r->width;
+  }
 
   info_left->header.stamp = time;
   info_right->header.stamp = time;
   info_left->header.frame_id = frame;
   info_right->header.frame_id = frame;
 
-  //left_info_pub.publish(info_left);
-  left_info_pub_->publish(std::move(info_left));
-  //right_info_pub.publish(info_right);
-  right_info_pub_->publish(std::move(info_right));
+  if(intra_){
+    //left_pub.publish(image_left);
+    left_pub_->publish(*img_l);
 
+    //right_pub.publish(image_right);
+    right_pub_->publish(*img_r);
+
+    //left_info_pub.publish(info_left);
+    left_info_pub_->publish(*info_left);
+    //right_info_pub.publish(info_right);
+    right_info_pub_->publish(*info_right);
+  }
+  else{
+    left_camera_transport_pub_.publish(img_l, info_left);
+    right_camera_transport_pub_.publish(img_r, info_right);
+  }
 }
 
 
@@ -337,9 +404,10 @@ void Single_StereoCamera::feedImages() {
       //if (frame_left && frame_right) {
       if (frame_left) {
         //ImagePtr image_left(new Image);
-        auto image_left = std::make_unique<Image>();
+        auto image_left = std::make_shared<sensor_msgs::msg::Image>();
+
         //ImagePtr image_right(new Image);
-        auto image_right = std::make_unique<Image>();
+        auto image_right = std::make_shared<sensor_msgs::msg::Image>();
 
         image_left->height = height;
         image_left->width = width;
@@ -380,13 +448,9 @@ void Single_StereoCamera::feedImages() {
           //memcpy(&image_right->data[0], frame_right, width * height * 3);
         //}
 
-
         //left_pub.publish(image_left);
-        left_pub_->publish(std::move(image_left));
         //right_pub.publish(image_right);
-        right_pub_->publish(std::move(image_right));
-
-        sendInfo(capture_time);
+        sendInfo(capture_time,image_left,image_right);
 
         ++pair_id;
       }
@@ -424,4 +488,14 @@ Single_StereoCamera::~Single_StereoCamera() {
   //  delete cam_right;
 }
 
+bool Single_StereoCamera::checkCameraInfo(
+  sensor_msgs::msg::Image const & img,
+  sensor_msgs::msg::CameraInfo const & ci)
+{
+  return ci.width == img.width && ci.height == img.height;
 }
+
+
+}
+
+//RCLCPP_COMPONENTS_REGISTER_NODE(uvc_camera::Single_StereoCamera)
