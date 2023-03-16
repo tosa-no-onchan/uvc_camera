@@ -360,8 +360,12 @@ int Cam::grab(unsigned char **frame, uint32_t &bytes_used)
   memset(&buf, 0, sizeof(buf));
   buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   buf.memory = V4L2_MEMORY_MMAP;
-  if (ioctl(fd, VIDIOC_DQBUF, &buf) < 0)
-    throw std::runtime_error("couldn't dequeue buffer");
+  if (ioctl(fd, VIDIOC_DQBUF, &buf) < 0){
+    //throw std::runtime_error("couldn't dequeue buffer");
+    // changed by nishi 2023.3.16
+    perror("couldn't dequeue buffer");
+    return -1;
+  }
   bytes_used = buf.bytesused;
   if (mode == MODE_RGB)
   {

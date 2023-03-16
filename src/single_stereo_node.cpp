@@ -5,7 +5,7 @@
 //#include "rclcpp/rclcpp.hpp"
 //#include <nodelet/loader.h>
 
-#include "uvc_camera/single_stereocamera.hpp"
+#include "uvc_camera/single_stereo.hpp"
 
 using namespace std::chrono_literals;
 
@@ -21,9 +21,8 @@ int main (int argc, char **argv) {
   //rclcpp::spin(node);
 
   //rclcpp::spin(std::make_shared<uvc_camera::Single_StereoCamera>("uvc_camera_stereo"));
-  rclcpp::spin(std::make_shared<uvc_camera::Single_StereoCamera>(rclcpp::NodeOptions{}));
+  rclcpp::spin(std::make_shared<single_stereo::Single_StereoCamera>(rclcpp::NodeOptions{}));
 
-  //auto node = std::make_shared<v4l2_camera::V4L2Camera>(rclcpp::NodeOptions{});
 
   rclcpp::shutdown();
   //node = nullptr;

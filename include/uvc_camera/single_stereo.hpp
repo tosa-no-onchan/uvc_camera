@@ -1,5 +1,5 @@
 /*
-* single_stereocamera.h
+* single_stereo.h
 */
 
 #ifndef SINGLE_STEREOCAMERA_HPP_
@@ -10,7 +10,8 @@
 #include <memory>
 #include <string>
 
-#include <boost/thread.hpp>
+//#include <boost/thread.hpp>
+#include <thread>
 
 //#include <ros/ros.h>
 #include <rclcpp/rclcpp.hpp>
@@ -30,7 +31,7 @@
 //using namespace std::chrono_literals;
 
 
-namespace uvc_camera {
+namespace single_stereo {
 
 class Single_StereoCamera : public rclcpp::Node
 {
@@ -53,7 +54,8 @@ class Single_StereoCamera : public rclcpp::Node
     //image_transport::ImageTransport it;
     image_transport::CameraPublisher camera_transport_pub_;
     bool ok;
-    bool intra_= false;
+    bool intra_; // true -> old type / false -> New type
+    bool trace_;
     
     uvc_cam::Cam *cam_left, *cam_right;
     int width, height, fps, skip_frames, frames_to_skip;
@@ -82,15 +84,22 @@ class Single_StereoCamera : public rclcpp::Node
 
     size_t count_;
 
-    boost::thread image_thread;
-    //std::thread image_thread_;
+    //boost::thread image_thread;
+    std::thread image_thread;
 
     bool checkCameraInfo(
       sensor_msgs::msg::Image const & img,
       sensor_msgs::msg::CameraInfo const & ci);
 
+    // test by nishi
+    rclcpp::TimerBase::SharedPtr timer_;
+    void TimerCallback();
+    unsigned int pair_id_ = 0;
+    unsigned int pair_id_prev_ = 0;
+    int trace_sts_=0;
+
 };
 
-} // namespace uvc_camera
+} // namespace single_stereo
 
 #endif  // SINGLE_STEREOCAMERA_H_

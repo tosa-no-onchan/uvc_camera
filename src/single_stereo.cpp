@@ -13,7 +13,7 @@
 //#include <camera_info_manager/camera_info_manager.hpp>
 //#include <image_transport/image_transport.hpp>
 
-#include "uvc_camera/single_stereocamera.hpp"
+#include "uvc_camera/single_stereo.hpp"
 
 
 #include "rclcpp_components/register_node_macro.hpp"
@@ -56,7 +56,8 @@ static inline void rotate(unsigned char *dst_chr, unsigned char *src_chr, int pi
   }
 }
 
-namespace uvc_camera 
+//namespace uvc_camera 
+namespace single_stereo
 {
 
 //Single_StereoCamera::Single_StereoCamera(ros::NodeHandle comm_nh, ros::NodeHandle param_nh) :
@@ -70,6 +71,9 @@ Single_StereoCamera::Single_StereoCamera(rclcpp::NodeOptions const & options)
 void Single_StereoCamera::init()
 {
   /* default config values */
+  trace_ = false;
+	int qos = 0;
+  intra_ = false;   // true -> old type / false -> New type
   width = 640;
   height = 480;
   fps = 10;
@@ -86,97 +90,109 @@ void Single_StereoCamera::init()
   right_cinfo_name="narrow_stereo/right"; // for ROS2
 
   /* set up information managers */
-  std::string left_url, right_url;
+  std::string left_url="file:///home/nishi/colcon_ws/src/uvc_camera/example-left.yaml";
+  std::string right_url="file:///home/nishi/colcon_ws/src/uvc_camera/example-right.yaml";
 
   bool auto_focus = false;
   int focus_absolute = 0;
-  bool auto_exposure;
+
+  // set defaults value by nishi 2023.2.13
+  int auto_exposure=-1;		// 0 to 3
   int exposure_absolute;
-  int brightness;
-  int power_line_frequency;
+  int brightness=-100;			// -64 to 64
+  int power_line_frequency=-1;	// 0 / 50 /60 / -1 
+
+  trace_ = this->declare_parameter<bool>("trace", trace_);
+  intra_ = this->declare_parameter<bool>("intra", intra_);
+	qos = this->declare_parameter<int>("qos", qos);
+
+  left_url = this->declare_parameter<std::string>("left/camera_info_url",left_url);
+  right_url = this->declare_parameter<std::string>("right/camera_info_url",right_url);
+
+  left_cinfo_name = this->declare_parameter<std::string>("left_cinfo_name",left_cinfo_name);
+  right_cinfo_name = this->declare_parameter<std::string>("right_cinfo_name",right_cinfo_name);
+
+  left_device = this->declare_parameter<std::string>("left/device",left_device);
+  right_device = this->declare_parameter<std::string>("right/device",right_device);
+  fps = this->declare_parameter<int>("fps",fps);
+  skip_frames = this->declare_parameter<int>("skip_frames",skip_frames);
+  rotate_left = this->declare_parameter<bool>("left/rotate", rotate_left);
+  rotate_right = this->declare_parameter<bool>("right/rotate", rotate_right);
+  width = this->declare_parameter<int>("width", width);
+  height = this->declare_parameter<int>("height", height);
+  frame = this->declare_parameter<std::string>("frame_id", frame);
 
 
-  this->declare_parameter("left/camera_info_url");
-  this->declare_parameter("right/camera_info_url");
+  auto_focus = this->declare_parameter<bool>("auto_focus", auto_focus);
+  focus_absolute = this->declare_parameter<int>("focus_absolute", focus_absolute);
 
-  this->declare_parameter<std::string>("left_cinfo_name",left_cinfo_name);
-  this->declare_parameter<std::string>("right_cinfo_name",right_cinfo_name);
-
-  this->declare_parameter<std::string>("left/device",left_device);
-  this->declare_parameter<std::string>("right/device",right_device);
-  this->declare_parameter<int>("fps",fps);
-  this->declare_parameter<int>("skip_frames",skip_frames);
-  this->declare_parameter<bool>("left/rotate", rotate_left);
-  this->declare_parameter<bool>("right/rotate", rotate_right);
-  this->declare_parameter<int>("width", width);
-  this->declare_parameter<int>("height", height);
-  this->declare_parameter<std::string>("frame_id", frame);
+  auto_exposure = this->declare_parameter<int>("auto_exposure",auto_exposure);
+  exposure_absolute = this->declare_parameter<int>("exposure_absolute",exposure_absolute);
+  brightness = this->declare_parameter<int>("brightness",brightness);
+  power_line_frequency = declare_parameter<int>("power_line_frequency",power_line_frequency);
 
 
-  this->declare_parameter<bool>("auto_focus", auto_focus);
-  this->declare_parameter<int>("focus_absolute", focus_absolute);
+  if(intra_){
+    RCLCPP_INFO(this->get_logger(),"intra: True");
+  }
+  else{
+    RCLCPP_INFO(this->get_logger(),"intra: False");
+  }
 
-  this->declare_parameter("auto_exposure");
-  this->declare_parameter("exposure_absolute");
-  this->declare_parameter("brightness");
-  declare_parameter("power_line_frequency");
+  if(trace_){
+    RCLCPP_INFO(this->get_logger(),"trace: True");
+  }
+  else{
+    RCLCPP_INFO(this->get_logger(),"trace: False");
+  }
 
+  RCLCPP_INFO(this->get_logger(),"qos: %d",qos);
 
   //pnode.getParam("left/camera_info_url", left_url);
   // left/camera_info_url
-  //get_parameter<std::string>("left/camera_info_url", left_url);
-  get_parameter<std::string>("left/camera_info_url", left_url);
-  //RCLCPP_INFO(get_logger(), "left/camera_info_url: %s", left_url.c_str());
-  std::cout << "left/camera_info_url:"<< left_url.c_str() << std::endl;
+  RCLCPP_INFO(get_logger(), "left/camera_info_url: %s", left_url.c_str());
 
   //pnode.getParam("right/camera_info_url", right_url);
-  get_parameter<std::string>("right/camera_info_url", right_url);
-  //RCLCPP_INFO(get_logger(), "right/camera_info_url: %s", right_url.c_str());
-  std::cout << "right/camera_info_url:"<< right_url.c_str() << std::endl;
-
+  // right/camera_info_url
+  RCLCPP_INFO(get_logger(), "right/camera_info_url: %s", right_url.c_str());
 
   /* pull other configuration */
   //pnode.getParam("left/device", left_device);
-  get_parameter<std::string>("left/device", left_device);
-  //RCLCPP_INFO(get_logger(), "left/device: %s", left_url.c_str());
-  std::cout << "left/device:"<< left_device.c_str() << std::endl;
+  RCLCPP_INFO(get_logger(), "left/device: %s", left_device.c_str());
 
   //pnode.getParam("right/device", right_device);
-  get_parameter<std::string>("right/device", right_device);
-  std::cout << "right/device:"<< right_device.c_str() << std::endl;
+  RCLCPP_INFO(get_logger(), "right/device: %s", right_device.c_str());
 
   //pnode.getParam("fps", fps);
-  get_parameter<int>("fps", fps);
-  std::cout << "fps:"<< fps << std::endl;
+  RCLCPP_INFO(get_logger(), "fps: %d", fps);
 
   //pnode.getParam("skip_frames", skip_frames);
-  get_parameter<int>("skip_frames", skip_frames);
-  std::cout << "skip_frames:"<< fps << std::endl;
+  RCLCPP_INFO(get_logger(), "skip_frames: %d", fps);
+  //std::cout << "skip_frames:"<< skip_frames << std::endl;
 
   //pnode.getParam("left/rotate", rotate_left);
-  get_parameter<bool>("left/rotate", rotate_left);
   if(rotate_left)
     std::cout << "left/rotate: true" << std::endl;
   else
     std::cout << "left/rotate: flase" << std::endl;
 
   //pnode.getParam("right/rotate", rotate_right);
-  get_parameter<bool>("right/rotate", rotate_right);
   if(rotate_right)
     std::cout << "right/rotate: true" << std::endl;
   else
     std::cout << "right/rotate: flase" << std::endl;
 
   //pnode.getParam("width", width);
-  get_parameter<int>("width", width);
-  std::cout << "width:"<< width << std::endl;
+  RCLCPP_INFO(get_logger(), "width: %d", width);
+  //std::cout << "width:"<< width << std::endl;
+
   //pnode.getParam("height", height);
-  get_parameter<int>("height", height);
-  std::cout << "height:"<< height << std::endl;
+  RCLCPP_INFO(get_logger(), "height: %d", height);
+  //std::cout << "height:"<< height << std::endl;
 
   //pnode.getParam("frame_id", frame);
-  get_parameter<std::string>("frame_id", frame);
-  std::cout << "frame_id:"<< frame.c_str() << std::endl;
+  RCLCPP_INFO(get_logger(), "frame_id: %s", frame.c_str());
+  //std::cout << "frame_id:"<< frame.c_str() << std::endl;
 
 
   //left_info_mgr.loadCameraInfo(left_url);
@@ -198,36 +214,41 @@ void Single_StereoCamera::init()
 
     // https://yhrscoding.hatenablog.com/entry/2021/09/26/104445
     rclcpp::QoS video_qos(1);
-    video_qos.reliable();
-    //video_qos.best_effort();
-    video_qos.durability_volatile();
+    video_qos.reliability((rmw_qos_reliability_policy_t)qos);
+    //video_qos.durability_volatile();
 
     /* advertise image streams and info streams */
     //left_pub = it.advertise("left/image_raw", 1);
-    //left_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_raw", 1);
     left_pub_ = create_publisher<sensor_msgs::msg::Image>("left/image_raw", video_qos);
 
     //right_pub = it.advertise("right/image_raw", 1);
-    //right_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_raw", 1);
     right_pub_ = create_publisher<sensor_msgs::msg::Image>("right/image_raw", video_qos);
 
     //left_info_pub = node.advertise<CameraInfo>("left/camera_info", 1);
-    //left_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 1);
     left_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", video_qos);
 
     //right_info_pub = node.advertise<CameraInfo>("right/camera_info", 1);
-    //right_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", 1);
     right_info_pub_ = create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", video_qos);
 
   }
   else{
     //#define USE_TEST_VAL
     //#ifdef USE_TEST_VAL
+
       rmw_qos_profile_t video_qos_profile = rmw_qos_profile_sensor_data;
       video_qos_profile.depth=1;
-
-      //video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_RELIABLE;
-      video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_SYSTEM_DEFAULT;
+      switch(qos){
+        case 0:
+          video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_SYSTEM_DEFAULT;
+        break;
+        case 1:
+          video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+        break;
+        case 2:
+          video_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
+        break;
+      }
+      //video_qos_profile.reliability = (rmw_qos_reliability_policy_t)qos;
 
       //video_qos_profile.durability = RMW_QOS_POLICY_DURABILITY_VOLATILE;
       video_qos_profile.durability = RMW_QOS_POLICY_DURABILITY_SYSTEM_DEFAULT;
@@ -255,7 +276,7 @@ void Single_StereoCamera::init()
 
 
   //if (pnode.getParam("auto_focus", auto_focus)) {
-  if (get_parameter("auto_focus", auto_focus)) {
+  if (auto_focus) {
     cam_left->set_v4l2_control(V4L2_CID_FOCUS_AUTO, auto_focus, "auto_focus");
     //cam_right->set_v4l2_control(V4L2_CID_FOCUS_AUTO, auto_focus, "auto_focus");
   }
@@ -285,21 +306,24 @@ void Single_StereoCamera::init()
   }
 
   //if (pnode.getParam("brightness", brightness)) {
-  if (get_parameter("brightness", brightness)) {
+  if (brightness >= -64 && brightness <= 64) {
     cam_left->set_v4l2_control(V4L2_CID_BRIGHTNESS, brightness, "brightness");
     //cam_right->set_v4l2_control(V4L2_CID_BRIGHTNESS, brightness, "brightness");
   }
 
   //if (pnode.getParam("power_line_frequency", power_line_frequency)) {
-  if (get_parameter("power_line_frequency", power_line_frequency)) {
+  if (power_line_frequency >=0 ) {
     int val;
     if (power_line_frequency == 0) {
       val = V4L2_CID_POWER_LINE_FREQUENCY_DISABLED;
-    } else if (power_line_frequency == 50) {
+    } 
+    else if (power_line_frequency == 50) {
       val = V4L2_CID_POWER_LINE_FREQUENCY_50HZ;
-    } else if (power_line_frequency == 60) {
+    } 
+    else if (power_line_frequency == 60) {
       val = V4L2_CID_POWER_LINE_FREQUENCY_60HZ;
-    } else {
+    } 
+    else {
       printf("power_line_frequency=%d not supported. Using auto.\n", power_line_frequency);
       val = V4L2_CID_POWER_LINE_FREQUENCY_AUTO;
     }
@@ -325,10 +349,16 @@ void Single_StereoCamera::init()
 
   std::cout << "Single_StereoCamera::init(): complete!!" << std::endl;
 
+  // 監視ルーチンを入れてみる。 2023.3.11 
+  // from usb_camera_driver.cpp
+  timer_ = this->create_wall_timer(700ms, std::bind(&Single_StereoCamera::TimerCallback, this));
+  //timer_ = this->create_wall_timer(300ms, std::bind(&Single_StereoCamera::TimerCallback, this));
 
   /* and turn on the streamer */
   ok = true;
-  image_thread = boost::thread(boost::bind(&Single_StereoCamera::feedImages, this));
+  //image_thread = boost::thread(boost::bind(&Single_StereoCamera::feedImages, this));
+  image_thread = std::thread(std::bind(&Single_StereoCamera::feedImages, this));
+
 }
 
 void Single_StereoCamera::sendInfo(rclcpp::Time time, std::shared_ptr<sensor_msgs::msg::Image> const & img_l, 
@@ -358,6 +388,8 @@ void Single_StereoCamera::sendInfo(rclcpp::Time time, std::shared_ptr<sensor_msg
   info_left->header.frame_id = frame;
   info_right->header.frame_id = frame;
 
+  trace_sts_=20;
+
   if(intra_){
     //left_pub.publish(image_left);
     left_pub_->publish(*img_l);
@@ -371,36 +403,54 @@ void Single_StereoCamera::sendInfo(rclcpp::Time time, std::shared_ptr<sensor_msg
     right_info_pub_->publish(*info_right);
   }
   else{
+    // http://docs.ros.org/en/jade/api/image_transport/html/classimage__transport_1_1CameraPublisher.html
+    // https://github.com/ros-perception/image_transport_tutorials
     left_camera_transport_pub_.publish(img_l, info_left);
+
+    trace_sts_=23;
+
     right_camera_transport_pub_.publish(img_r, info_right);
   }
 }
 
 
 void Single_StereoCamera::feedImages() {
-  unsigned int pair_id = 0;
+  //unsigned int pair_id_ = 0;
+
+  double sec_dur = 3.0;
+  //uint32_t nsec_dur = 1000000000 * 2; // 2[sec]
+
+  rclcpp::Time start_t = now();
+  rclcpp::WallRate rate(fps);
+
+  int cnt=0;
+
   while (ok) {
+    if(fps < 15){
+      rate.sleep();
+    }
     unsigned char *frame_left = NULL;
     //unsigned char *frame_right = NULL;
     uint32_t bytes_used_left;
     //uint32_t bytes_used_right;
 
     //ros::Time capture_time = ros::Time::now();
+    // https://docs.ros2.org/beta3/api/rclcpp/classrclcpp_1_1Time.html
     rclcpp::Time capture_time = now();
 
     // test
     //printf("%s=",capture_time);
-
+    trace_sts_=1;
 
     int left_idx = cam_left->grab(&frame_left, bytes_used_left);
     //int right_idx = cam_right->grab(&frame_right, bytes_used_right);
+    if(left_idx >= 0){
+      /* Read in every frame the camera generates, but only send each
+      * (skip_frames + 1)th frame. This reduces effective frame
+      * rate, processing time and network usage while keeping the
+      * images synchronized within the true framerate.
+      */
 
-    /* Read in every frame the camera generates, but only send each
-     * (skip_frames + 1)th frame. This reduces effective frame
-     * rate, processing time and network usage while keeping the
-     * images synchronized within the true framerate.
-     */
-    if (skip_frames == 0 || frames_to_skip == 0) {
       //if (frame_left && frame_right) {
       if (frame_left) {
         //ImagePtr image_left(new Image);
@@ -448,22 +498,43 @@ void Single_StereoCamera::feedImages() {
           //memcpy(&image_right->data[0], frame_right, width * height * 3);
         //}
 
+        trace_sts_=2;
+
         //left_pub.publish(image_left);
         //right_pub.publish(image_right);
         sendInfo(capture_time,image_left,image_right);
 
-        ++pair_id;
+        trace_sts_= 3;
+
+        ++pair_id_;
+
+        //if(trace_ && (pair_id_ % 60)==0){
+        //  //RCLCPP_INFO(get_logger(), "pair_id: %d", pair_id_);
+        //  std::cout << "Single_StereoCamera::feedImages(): #2 pair_id_: " << pair_id_ << std::endl;
+        //}
       }
       frames_to_skip = skip_frames;
-    } 
-    else {
-      frames_to_skip--;
-    }
 
-    if (frame_left)
-      cam_left->release(left_idx);
-    //if (frame_right)
-    //  cam_right->release(right_idx);
+      if (frame_left)
+        cam_left->release(left_idx);
+      //if (frame_right)
+      //  cam_right->release(right_idx);
+
+      cnt++;
+      rclcpp::Time cur_t = now();
+      rclcpp::Duration elapsed = cur_t - start_t;
+      // 2[sec] 経過
+      if(elapsed.seconds() >= sec_dur){
+        std::cout << "Single_StereoCamera::feedImages(): #2 rate: " << cnt/3 << std::endl;
+
+        start_t = now();
+        cnt=0;
+      }
+
+    }
+    else{
+      std::cout << "Single_StereoCamera::feedImages(): #3 grab error!!" << std::endl;
+    }
   }
 }
 
@@ -477,6 +548,18 @@ void Single_StereoCamera::copy_frame(unsigned char *left,unsigned char *right,un
     frame += step;
     right += step;
   }
+}
+
+void Single_StereoCamera::TimerCallback(){
+  if(pair_id_ == pair_id_prev_){
+
+    //RCLCPP_INFO(get_logger(), "TimerCallback() trace_sts_: %d", trace_sts_);
+    std::cout << "TimerCallback() trace_sts_:" << trace_sts_ << std::endl;
+  }
+  pair_id_prev_=pair_id_;
+
+  //std::cout << "TimerCallback() #2 trace_sts_:" << trace_sts_ << std::endl;
+
 }
 
 Single_StereoCamera::~Single_StereoCamera() {
@@ -498,4 +581,11 @@ bool Single_StereoCamera::checkCameraInfo(
 
 }
 
-//RCLCPP_COMPONENTS_REGISTER_NODE(uvc_camera::Single_StereoCamera)
+#include "rclcpp_components/register_node_macro.hpp"
+
+// Register the component with class_loader.
+// This acts as a sort of entry point, allowing the component to be discoverable when its library
+// is being loaded into a running process.
+
+
+RCLCPP_COMPONENTS_REGISTER_NODE(single_stereo::Single_StereoCamera)
