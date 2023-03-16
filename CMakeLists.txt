@@ -17,7 +17,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-#find_package(ament_cmake_ros REQUIRED)
+find_package(ament_cmake_ros REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(image_transport REQUIRED)
@@ -28,7 +28,25 @@ find_package(Boost REQUIRED COMPONENTS thread system)
 #find_package(V4L2 REQUIRED)
 set(V4L2_LIBRARIES v4l2)
 
-# add by nishi
+
+# for single_stereo_camera nodelet
+add_library(single_stereo
+  src/single_stereo.cpp
+  src/uvc_cam.cpp)
+rclcpp_components_register_nodes(single_stereo "single_stereo::Single_StereoCamera")
+
+target_include_directories(single_stereo PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+ament_target_dependencies(single_stereo
+  "rclcpp"
+  "rclcpp_components"
+  "image_transport"
+  "camera_info_manager")
+
+
+# for uvc_single_stereo_node
 add_executable(uvc_single_stereo_node src/single_stereo_node.cpp  src/single_stereo.cpp  src/uvc_cam.cpp)
 
 target_include_directories(uvc_single_stereo_node PUBLIC
@@ -48,9 +66,20 @@ target_link_libraries(uvc_single_stereo_node ${Boost_LIBRARIES} ${V4L2_LIBRARIES
 #target_compile_options(uvc_single_stereo_node PRIVATE -Werror)
 target_compile_options(uvc_single_stereo_node PRIVATE -Wunused-variable)
 
+# for nodelets
 install(
-  TARGETS 
-  uvc_single_stereo_node
+  TARGETS single_stereo
+  #DESTINATION lib/${PROJECT_NAME}
+
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib/${PROJECT_NAME}
+  LIBRARY DESTINATION lib/${PROJECT_NAME}
+  RUNTIME DESTINATION bin/${PROJECT_NAME}
+)
+
+# node
+install(
+  TARGETS uvc_single_stereo_node
   DESTINATION lib/${PROJECT_NAME}
 
   #EXPORT export_${PROJECT_NAME}
@@ -58,6 +87,7 @@ install(
   #LIBRARY DESTINATION lib
   #RUNTIME DESTINATION bin
 )
+
 
 # install the launch directory
 install(DIRECTORY

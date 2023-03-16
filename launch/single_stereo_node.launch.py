@@ -7,8 +7,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         Node(
-            package='uvc_camera',
-            executable='uvc_single_stereo_node',
+            package='uvc_camera',executable='uvc_single_stereo_node',output="screen",
             #name='uvc_camera_stereo',
             #remappings=[('string_topic', '/talker')],
             emulate_tty=True,
